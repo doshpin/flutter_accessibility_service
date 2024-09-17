@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import io.flutter.embedding.android.FlutterTextureView;
 import io.flutter.embedding.android.FlutterView;
+import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.FlutterEngineCache;
 
 
@@ -119,6 +120,11 @@ public class AccessibilityListener extends AccessibilityService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+      Log.e("AccessibilityListener", "onStartCommand");
+      if (intent == null) {
+        Log.e("AccessibilityListener", "Received null intent in onStartCommand");
+        return START_NOT_STICKY;
+      }
         boolean globalAction = intent.getBooleanExtra(INTENT_GLOBAL_ACTION, false);
         boolean systemActions = intent.getBooleanExtra(INTENT_SYSTEM_GLOBAL_ACTIONS, false);
         if (systemActions && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -190,6 +196,18 @@ public class AccessibilityListener extends AccessibilityService {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP_MR1)
     @Override
     protected void onServiceConnected() {
+      FlutterEngine flutterEngine = FlutterEngineCache.getInstance().get(CACHED_TAG);
+      // Check if the FlutterEngine is available
+      if (flutterEngine == null) {
+        Log.e("AccessibilityListener", "FlutterEngine not found in cache");
+        return; // Exit the method if no engine is found
+      }
+
+      // Ensure the FlutterRenderer is initialized before using it
+      if (flutterEngine.getRenderer() == null) {
+        Log.e("AccessibilityListener", "FlutterRenderer is not initialized");
+        return; // Exit the method if the renderer is not ready
+      }
         mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         mOverlayView = new FlutterView(getApplicationContext(), new FlutterTextureView(getApplicationContext()));
         mOverlayView.attachToFlutterEngine(FlutterEngineCache.getInstance().get(CACHED_TAG));
