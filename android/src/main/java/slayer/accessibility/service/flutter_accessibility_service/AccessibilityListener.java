@@ -54,19 +54,37 @@ public class AccessibilityListener extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
         try {
+            // Get package name from event directly - faster than getting from node
+            String packageName = accessibilityEvent.getPackageName() != null ?
+                accessibilityEvent.getPackageName().toString() : "";
+
+            // Skip processing for ignored apps immediately
+            if ("com.android.systemui".equals(packageName) ||
+                "com.android.launcher3".equals(packageName) ||
+                "com.android.inputmethod.latin".equals(packageName) ||
+                "com.google.android.inputmethod.latin".equals(packageName) ||
+                "com.nodoots.jimbo".equals(packageName)) {
+                Log.d("ACCESSIBILITY_EVENT", "Skipped event from ignored package: " + packageName);
+                return;
+            }
+
             final int eventType = accessibilityEvent.getEventType();
             AccessibilityNodeInfo parentNodeInfo = accessibilityEvent.getSource();
+
+            if (parentNodeInfo == null) {
+                return;
+            }
+
+            Log.d("ACCESSIBILITY_EVENT", "Processing event from package: " + packageName);
+
             AccessibilityWindowInfo windowInfo = null;
             List<String> nextTexts = new ArrayList<>();
             List<Integer> actions = new ArrayList<>();
             List<HashMap<String, Object>> subNodeActions = new ArrayList<>();
             HashSet<AccessibilityNodeInfo> traversedNodes = new HashSet<>();
             HashMap<String, Object> data = new HashMap<>();
-            if (parentNodeInfo == null) {
-                return;
-            }
+
             String nodeId = generateNodeId(parentNodeInfo);
-            String packageName = parentNodeInfo.getPackageName().toString();
             storeNode(nodeId, parentNodeInfo);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 windowInfo = parentNodeInfo.getWindow();
@@ -203,8 +221,8 @@ public class AccessibilityListener extends AccessibilityService {
         mOverlayView = new FlutterView(getApplicationContext(), new FlutterTextureView(getApplicationContext()));
         mOverlayView.attachToFlutterEngine(FlutterEngineCache.getInstance().get(CACHED_TAG));
         mOverlayView.setFitsSystemWindows(true);
-        mOverlayView.setFocusable(true);
-        mOverlayView.setFocusableInTouchMode(true);
+        mOverlayView.setFocusable(false);
+        mOverlayView.setFocusableInTouchMode(false);
         mOverlayView.setBackgroundColor(Color.TRANSPARENT);
     }
 
@@ -216,10 +234,10 @@ public class AccessibilityListener extends AccessibilityService {
             lp.format = PixelFormat.TRANSLUCENT;
             lp.width = width;
             lp.height = height;
-            if (!clickableThrough) {
-                lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-            } else {
-                lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+            // Always ensure overlay doesn't interfere with keyboard input
+            lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            if (clickableThrough) {
+                lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
                         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
             }
             lp.gravity = gravity;
