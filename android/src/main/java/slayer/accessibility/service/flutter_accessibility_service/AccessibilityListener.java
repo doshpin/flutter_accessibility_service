@@ -43,7 +43,7 @@ public class AccessibilityListener extends AccessibilityService {
     private static final int maxDepth = 20;
     private static LruCache<String, AccessibilityNodeInfo> nodeMap =
             new LruCache<>(CACHE_SIZE);
-    private static final int DEFAULT_MAX_TREE_DEPTH = 15;
+    private static final int DEFAULT_MAX_TREE_DEPTH = 25;
     private int maximumTreeDepth = DEFAULT_MAX_TREE_DEPTH;
 
     public static AccessibilityNodeInfo getNodeInfo(String id) {
@@ -69,15 +69,32 @@ public class AccessibilityListener extends AccessibilityService {
             }
 
             final int eventType = accessibilityEvent.getEventType();
-            AccessibilityNodeInfo parentNodeInfo = accessibilityEvent.getSource();
+            AccessibilityNodeInfo sourceNodeInfo = accessibilityEvent.getSource();
 
-            if (parentNodeInfo == null) {
+            if (sourceNodeInfo == null) {
                 return;
             }
 
             Log.d("ACCESSIBILITY_EVENT", "Processing event from package: " + packageName);
 
             AccessibilityWindowInfo windowInfo = null;
+            AccessibilityNodeInfo parentNodeInfo = sourceNodeInfo;
+
+            // Try to get the window root node instead of just the event source
+            // This ensures we capture the entire window including toolbars/headers
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                windowInfo = sourceNodeInfo.getWindow();
+                if (windowInfo != null) {
+                    AccessibilityNodeInfo rootNode = windowInfo.getRoot();
+                    if (rootNode != null) {
+                        Log.d("ACCESSIBILITY_EVENT", "Using window root node instead of event source");
+                        parentNodeInfo = rootNode;
+                    } else {
+                        Log.d("ACCESSIBILITY_EVENT", "Window root is null, falling back to event source");
+                    }
+                }
+            }
+
             List<String> nextTexts = new ArrayList<>();
             List<Integer> actions = new ArrayList<>();
             List<HashMap<String, Object>> subNodeActions = new ArrayList<>();
@@ -86,10 +103,6 @@ public class AccessibilityListener extends AccessibilityService {
 
             String nodeId = generateNodeId(parentNodeInfo);
             storeNode(nodeId, parentNodeInfo);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                windowInfo = parentNodeInfo.getWindow();
-            }
-
 
             Intent intent = new Intent(ACCESSIBILITY_INTENT);
 
