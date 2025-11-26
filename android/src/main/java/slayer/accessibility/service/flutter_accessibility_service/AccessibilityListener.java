@@ -248,12 +248,23 @@ public class AccessibilityListener extends AccessibilityService {
             return;
         }
 
-        mOverlayView = new FlutterView(getApplicationContext(), new FlutterTextureView(getApplicationContext()));
-        mOverlayView.attachToFlutterEngine(flutterEngine);
-        mOverlayView.setFitsSystemWindows(true);
-        mOverlayView.setFocusable(false);
-        mOverlayView.setFocusableInTouchMode(false);
-        mOverlayView.setBackgroundColor(Color.TRANSPARENT);
+        // Check if renderer is initialized (may be null even if engine exists)
+        if (flutterEngine.getRenderer() == null) {
+            Log.w("ACCESSIBILITY_SERVICE", "FlutterEngine renderer not initialized yet - overlay will not be initialized");
+            return;
+        }
+
+        try {
+            mOverlayView = new FlutterView(getApplicationContext(), new FlutterTextureView(getApplicationContext()));
+            mOverlayView.attachToFlutterEngine(flutterEngine);
+            mOverlayView.setFitsSystemWindows(true);
+            mOverlayView.setFocusable(false);
+            mOverlayView.setFocusableInTouchMode(false);
+            mOverlayView.setBackgroundColor(Color.TRANSPARENT);
+            Log.d("ACCESSIBILITY_SERVICE", "Overlay initialized successfully");
+        } catch (Exception e) {
+            Log.e("ACCESSIBILITY_SERVICE", "Failed to initialize overlay: " + e.getMessage());
+        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP_MR1)
