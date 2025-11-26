@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import io.flutter.embedding.android.FlutterTextureView;
 import io.flutter.embedding.android.FlutterView;
+import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.FlutterEngineCache;
 
 
@@ -153,6 +154,12 @@ public class AccessibilityListener extends AccessibilityService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // Intent can be null when service is restarted by system (START_STICKY)
+        if (intent == null) {
+            Log.d("CMD_STARTED", "onStartCommand called with null intent (service restarted): " + startId);
+            return START_STICKY;
+        }
+
         boolean globalAction = intent.getBooleanExtra(INTENT_GLOBAL_ACTION, false);
         boolean systemActions = intent.getBooleanExtra(INTENT_SYSTEM_GLOBAL_ACTIONS, false);
         if (systemActions && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -231,8 +238,18 @@ public class AccessibilityListener extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+
+        // Get FlutterEngine from cache - may be null if service starts before app
+        FlutterEngine flutterEngine = FlutterEngineCache.getInstance().get(CACHED_TAG);
+        if (flutterEngine == null) {
+            Log.w("ACCESSIBILITY_SERVICE", "FlutterEngine not available yet - overlay will not be initialized");
+            // Service is connected but overlay cannot be initialized yet
+            // The overlay can be initialized later when showOverlay is called
+            return;
+        }
+
         mOverlayView = new FlutterView(getApplicationContext(), new FlutterTextureView(getApplicationContext()));
-        mOverlayView.attachToFlutterEngine(FlutterEngineCache.getInstance().get(CACHED_TAG));
+        mOverlayView.attachToFlutterEngine(flutterEngine);
         mOverlayView.setFitsSystemWindows(true);
         mOverlayView.setFocusable(false);
         mOverlayView.setFocusableInTouchMode(false);
