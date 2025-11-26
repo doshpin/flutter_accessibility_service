@@ -58,13 +58,13 @@ public class AccessibilityListener extends AccessibilityService {
             String packageName = accessibilityEvent.getPackageName() != null ?
                 accessibilityEvent.getPackageName().toString() : "";
 
-            // Skip processing for ignored apps immediately
-            if ("com.android.systemui".equals(packageName) ||
-                "com.android.launcher3".equals(packageName) ||
-                "com.android.inputmethod.latin".equals(packageName) ||
-                "com.google.android.inputmethod.latin".equals(packageName) ||
-                "com.nodoots.jimbo".equals(packageName)) {
-                Log.d("ACCESSIBILITY_EVENT", "Skipped event from ignored package: " + packageName);
+            // Only process events from whitelisted messaging apps
+            if (!packageName.equals("com.whatsapp") &&
+                !packageName.equals("com.whatsapp.w4b") &&
+                !packageName.equals("org.telegram.messenger") &&
+                !packageName.equals("org.telegram.messenger.web") &&
+                !packageName.equals("com.facebook.katana")) {
+                // Skip all other apps for better battery life
                 return;
             }
 
