@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.HashSet;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
 import io.flutter.embedding.android.FlutterTextureView;
@@ -44,8 +45,9 @@ public class AccessibilityListener extends AccessibilityService {
     private static final int maxDepth = 20;
     private static LruCache<String, AccessibilityNodeInfo> nodeMap =
             new LruCache<>(CACHE_SIZE);
-    private static final int DEFAULT_MAX_TREE_DEPTH = 25;
+    private static final int DEFAULT_MAX_TREE_DEPTH = 20;
     private int maximumTreeDepth = DEFAULT_MAX_TREE_DEPTH;
+    private AccessibilityQueue accessibilityQueue;
 
     public static AccessibilityNodeInfo getNodeInfo(String id) {
         return nodeMap.get(id);
@@ -144,9 +146,17 @@ public class AccessibilityListener extends AccessibilityService {
                     data.put("isPip", windowInfo.isInPictureInPictureMode());
                 }
             }
-            storeToSharedPrefs(data);
-            intent.putExtra(SEND_BROADCAST, true);
-            sendBroadcast(intent);
+
+            // Queue the event instead of sending broadcast directly
+            if (accessibilityQueue != null) {
+                intent.putExtra(SEND_BROADCAST, true);
+                accessibilityQueue.enqueue(data, intent);
+            } else {
+                // Fallback if queue not initialized
+                storeToSharedPrefs(data);
+                intent.putExtra(SEND_BROADCAST, true);
+                sendBroadcast(intent);
+            }
         } catch (Exception ex) {
             Log.e("EVENT", "onAccessibilityEvent: " + ex.getMessage());
         }
@@ -239,6 +249,11 @@ public class AccessibilityListener extends AccessibilityService {
     protected void onServiceConnected() {
         mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
+        // Initialize the accessibility queue
+        accessibilityQueue = new AccessibilityQueue(this);
+        accessibilityQueue.startProcessing();
+        Log.i("ACCESSIBILITY_SERVICE", "Accessibility queue started");
+
         // Get FlutterEngine from cache - may be null if service starts before app
         FlutterEngine flutterEngine = FlutterEngineCache.getInstance().get(CACHED_TAG);
         if (flutterEngine == null) {
@@ -297,6 +312,9 @@ public class AccessibilityListener extends AccessibilityService {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (accessibilityQueue != null) {
+            accessibilityQueue.stopProcessing();
+        }
         removeOverlay();
         SharedPreferences sharedPreferences = getSharedPreferences(SHARED_PREFS_TAG, MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
@@ -326,6 +344,82 @@ public class AccessibilityListener extends AccessibilityService {
         String json = gson.toJson(data);
         editor.putString(ACCESSIBILITY_NODE, json);
         editor.apply();
+    }
+
+    // Inner class for rate-limited accessibility queue
+    private static class AccessibilityQueue {
+        private final LinkedBlockingQueue<QueuedEvent> queue;
+        private final android.os.Handler handler;
+        private final android.content.Context context;
+        private static final int RATE_LIMIT_MS = 100; // 10 events/sec
+        private static final int MAX_QUEUE_SIZE = 500; // Smaller than notifications due to larger size
+        private final Runnable processingRunnable;
+        private boolean isProcessing = false;
+
+        AccessibilityQueue(android.content.Context context) {
+            this.queue = new LinkedBlockingQueue<>();
+            this.handler = new android.os.Handler(android.os.Looper.getMainLooper());
+            this.context = context;
+            this.processingRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (isProcessing) {
+                        processNext();
+                        handler.postDelayed(this, RATE_LIMIT_MS);
+                    }
+                }
+            };
+        }
+
+        void enqueue(HashMap<String, Object> data, Intent intent) {
+            // Drop oldest if queue is full
+            if (queue.size() >= MAX_QUEUE_SIZE) {
+                Log.w("AccessibilityQueue", "Queue full (" + MAX_QUEUE_SIZE + "), dropping oldest");
+                queue.poll();
+            }
+
+            QueuedEvent event = new QueuedEvent(data, intent);
+            queue.offer(event);
+            Log.d("AccessibilityQueue", "Enqueued event, queue size: " + queue.size());
+        }
+
+        void startProcessing() {
+            isProcessing = true;
+            handler.post(processingRunnable);
+            Log.i("AccessibilityQueue", "Started processing queue");
+        }
+
+        void stopProcessing() {
+            isProcessing = false;
+            handler.removeCallbacks(processingRunnable);
+            Log.i("AccessibilityQueue", "Stopped processing queue");
+        }
+
+        void processNext() {
+            QueuedEvent event = queue.poll();
+            if (event == null) {
+                return;
+            }
+
+            // Store latest event to SharedPreferences for debugging
+            if (context instanceof AccessibilityListener) {
+                ((AccessibilityListener) context).storeToSharedPrefs(event.data);
+            }
+
+            // Send broadcast
+            context.sendBroadcast(event.intent);
+            Log.d("AccessibilityQueue", "Processed event, remaining: " + queue.size());
+        }
+
+        private static class QueuedEvent {
+            final HashMap<String, Object> data;
+            final Intent intent;
+
+            QueuedEvent(HashMap<String, Object> data, Intent intent) {
+                this.data = data;
+                this.intent = intent;
+            }
+        }
     }
 
 }
