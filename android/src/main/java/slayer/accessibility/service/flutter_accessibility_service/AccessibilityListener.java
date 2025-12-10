@@ -45,7 +45,7 @@ public class AccessibilityListener extends AccessibilityService {
     private static final int maxDepth = 20;
     private static LruCache<String, AccessibilityNodeInfo> nodeMap =
             new LruCache<>(CACHE_SIZE);
-    private static final int DEFAULT_MAX_TREE_DEPTH = 20;
+    private static final int DEFAULT_MAX_TREE_DEPTH = 25;
     private int maximumTreeDepth = DEFAULT_MAX_TREE_DEPTH;
     private AccessibilityQueue accessibilityQueue;
 
