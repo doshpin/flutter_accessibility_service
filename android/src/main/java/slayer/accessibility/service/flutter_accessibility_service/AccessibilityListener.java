@@ -351,7 +351,8 @@ public class AccessibilityListener extends AccessibilityService {
         private final LinkedBlockingQueue<QueuedEvent> queue;
         private final android.os.Handler handler;
         private final android.content.Context context;
-        private static final int RATE_LIMIT_MS = 100; // 10 events/sec
+        private static final int eventsPerSecond = 30;
+        private static final int RATE_LIMIT_MS = 1000 / eventsPerSecond;
         private static final int MAX_QUEUE_SIZE = 500; // Smaller than notifications due to larger size
         private final Runnable processingRunnable;
         private boolean isProcessing = false;
